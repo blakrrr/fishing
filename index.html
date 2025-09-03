@@ -7,10 +7,34 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas" width="400" height="600"></canvas>
-        <div class="bite-alert" id="biteAlert">FISH ON! CLICK NOW!</div>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <h1>🎣 Fishing Game</h1>
+            <input type="text" id="playerName" placeholder="Enter your name" maxlength="20">
+            <input type="text" id="roomId" placeholder="Room ID (or leave empty)" maxlength="20">
+            <button id="joinGameBtn">Join Game</button>
+            <div class="login-info">
+                Leave Room ID empty to create/join a random room
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="game-container" style="display: none;">
+        <!-- Room Info -->
+        <div class="room-info">
+            <span>Room: <strong id="currentRoomId"></strong></span>
+            <span>Players: <strong id="playerCount">1/4</strong></span>
+        </div>
+
+        <!-- Game Canvas -->
+        <div class="game-area">
+            <canvas id="gameCanvas" width="400" height="600"></canvas>
+            <div class="bite-alert" id="biteAlert">FISH ON! CLICK NOW!</div>
+        </div>
         
+        <!-- Stats Panel -->
         <div class="ui-panel">
             <div class="stat">
                 <div class="stat-label">Fish Caught</div>
@@ -22,15 +46,31 @@
             </div>
             <div class="stat">
                 <div class="stat-label">Status</div>
-                <div class="stat-value" id="status">Ready</div>
+                <div class="stat-value" id="status">Connecting...</div>
             </div>
         </div>
+
+        <!-- Players List -->
+        <div class="players-panel">
+            <h3>Players</h3>
+            <div id="playersList"></div>
+        </div>
         
+        <!-- Chat System -->
+        <div class="chat-panel">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-container">
+                <input type="text" id="chatInput" placeholder="Type a message..." maxlength="100">
+                <button id="sendChatBtn">Send</button>
+            </div>
+        </div>
+
         <div class="instructions">
             Click to cast your line! Watch for the bite indicator and click quickly to catch fish.
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
