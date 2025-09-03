@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fishing Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        <div class="bite-alert" id="biteAlert">FISH ON! CLICK NOW!</div>
+        
+        <div class="ui-panel">
+            <div class="stat">
+                <div class="stat-label">Fish Caught</div>
+                <div class="stat-value" id="fishCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Status</div>
+                <div class="stat-value" id="status">Ready</div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            Click to cast your line! Watch for the bite indicator and click quickly to catch fish.
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
