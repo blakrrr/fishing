@@ -257,7 +257,32 @@ setInterval(() => {
 }, 60000); // Check every minute
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`🎣 Fishing Game Server running on port ${PORT}`);
     console.log(`📡 Socket.IO server ready for connections`);
+    console.log(`🌐 Server accessible at: http://localhost:${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+}).on('error', (err) => {
+    console.error('❌ Server failed to start:', err);
+    process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🔄 Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+    });
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('💥 Uncaught Exception:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
 });
