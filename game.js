@@ -71,19 +71,59 @@ class MultiplayerFishingGame {
     }
 
     setupSocketConnection() {
-        // Connect to server (adjust URL for your deployment)
-        const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://fishing-nnh9.onrender.com';
-        this.socket = io(serverUrl);
+        // Connect to server - updated for your deployment
+        const serverUrl = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000' 
+            : 'https://fishing-nnh9.onrender.com';
+            
+        console.log('Connecting to:', serverUrl);
+        
+        this.socket = io(serverUrl, {
+            transports: ['websocket', 'polling'],
+            upgrade: true,
+            rememberUpgrade: true,
+            timeout: 20000,
+            forceNew: true
+        });
 
         // Connection events
         this.socket.on('connect', () => {
-            console.log('Connected to server');
+            console.log('Connected to server:', this.socket.id);
             this.updateStatus('Connected');
         });
 
-        this.socket.on('disconnect', () => {
-            console.log('Disconnected from server');
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection failed:', error);
+            this.updateStatus('Connection Failed');
+            
+            // Show user-friendly error
+            if (!document.getElementById('connectionError')) {
+                const errorDiv = document.createElement('div');
+                errorDiv.id = 'connectionError';
+                errorDiv.style.cssText = `
+                    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                    background: #ff4444; color: white; padding: 20px; border-radius: 10px;
+                    z-index: 2000; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                `;
+                errorDiv.innerHTML = `
+                    <h3>Connection Error</h3>
+                    <p>Unable to connect to game server.</p>
+                    <button onclick="location.reload()" style="padding: 10px 20px; margin-top: 10px; background: white; color: #ff4444; border: none; border-radius: 5px; cursor: pointer;">
+                        Retry
+                    </button>
+                `;
+                document.body.appendChild(errorDiv);
+            }
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.log('Disconnected from server:', reason);
             this.updateStatus('Disconnected');
+            
+            if (reason === 'io server disconnect') {
+                // Server disconnected us, reconnect manually
+                this.socket.connect();
+            }
         });
 
         // Room events
