@@ -72,7 +72,7 @@ class MultiplayerFishingGame {
 
     setupSocketConnection() {
         // Connect to server (adjust URL for your deployment)
-        const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'YOUR_SERVER_URL';
+        const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://fishing-nnh9.onrender.com';
         this.socket = io(serverUrl);
 
         // Connection events
