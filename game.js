@@ -1,11 +1,16 @@
-class FishingGame {
+class MultiplayerFishingGame {
     constructor() {
+        this.socket = null;
+        this.currentPlayer = null;
+        this.otherPlayers = new Map();
+        this.roomId = null;
+        
+        // Game elements
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        this.canvas.addEventListener('click', this.handleClick.bind(this));
         
-        // Game state
-        this.gameState = 'ready'; // ready, casting, waiting, biting, reeling
+        // Single player game state (for current player)
+        this.gameState = 'ready';
         this.fishCount = 0;
         this.score = 0;
         this.player = {
@@ -15,7 +20,6 @@ class FishingGame {
             height: 60
         };
         
-        // Fishing mechanics
         this.fishingLine = {
             cast: false,
             x: this.player.x + this.player.width/2,
@@ -29,7 +33,6 @@ class FishingGame {
         this.biteWindow = 0;
         this.ripples = [];
         
-        // Fish types with different rarities and values
         this.fishTypes = [
             { name: 'Minnow', rarity: 0.5, value: 10, color: '#C0C0C0' },
             { name: 'Bass', rarity: 0.3, value: 25, color: '#228B22' },
@@ -37,16 +40,209 @@ class FishingGame {
             { name: 'Tuna', rarity: 0.04, value: 100, color: '#4682B4' },
             { name: 'Golden Fish', rarity: 0.01, value: 500, color: '#FFD700' }
         ];
-        
+
         this.init();
     }
     
     init() {
+        this.setupEventListeners();
+        this.setupSocketConnection();
         this.gameLoop();
-        this.updateUI();
     }
-    
-    handleClick() {
+
+    setupEventListeners() {
+        // Canvas click for fishing
+        this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+        
+        // Login form
+        document.getElementById('joinGameBtn').addEventListener('click', this.handleJoinGame.bind(this));
+        document.getElementById('playerName').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleJoinGame();
+        });
+        document.getElementById('roomId').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleJoinGame();
+        });
+
+        // Chat system
+        document.getElementById('sendChatBtn').addEventListener('click', this.sendChatMessage.bind(this));
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.sendChatMessage();
+        });
+    }
+
+    setupSocketConnection() {
+        // Connect to server (adjust URL for your deployment)
+        const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'YOUR_SERVER_URL';
+        this.socket = io(serverUrl);
+
+        // Connection events
+        this.socket.on('connect', () => {
+            console.log('Connected to server');
+            this.updateStatus('Connected');
+        });
+
+        this.socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            this.updateStatus('Disconnected');
+        });
+
+        // Room events
+        this.socket.on('roomJoined', (data) => {
+            console.log('Joined room:', data);
+            this.roomId = data.roomId;
+            this.currentPlayer = data.playerId;
+            this.updatePlayersFromData(data.players);
+            this.showGameScreen();
+            this.updateRoomInfo();
+            this.updateStatus('Ready');
+        });
+
+        this.socket.on('roomFull', () => {
+            alert('Room is full! Please try a different room.');
+        });
+
+        this.socket.on('playerJoined', (data) => {
+            console.log('Player joined:', data);
+            this.updatePlayersFromData(data.players);
+            this.updateRoomInfo();
+            this.addChatMessage(`${data.playerName} joined the game`, 'system');
+        });
+
+        this.socket.on('playerLeft', (data) => {
+            console.log('Player left:', data);
+            this.updatePlayersFromData(data.players);
+            this.updateRoomInfo();
+            this.addChatMessage(`A player left the game`, 'system');
+        });
+
+        // Game state events
+        this.socket.on('playerStateUpdate', (data) => {
+            if (this.otherPlayers.has(data.playerId)) {
+                const player = this.otherPlayers.get(data.playerId);
+                Object.assign(player, data);
+            }
+        });
+
+        this.socket.on('playerCast', (data) => {
+            // Visual feedback for other players casting
+            if (this.otherPlayers.has(data.playerId)) {
+                const player = this.otherPlayers.get(data.playerId);
+                // Could add casting animation for other players here
+            }
+        });
+
+        this.socket.on('playerCaughtFish', (data) => {
+            this.addChatMessage(
+                `${data.playerName} caught a ${data.fishName} for ${data.fishValue} points!`, 
+                'system'
+            );
+            this.updatePlayersList();
+        });
+
+        // Chat events
+        this.socket.on('chatMessage', (data) => {
+            const isCurrentPlayer = data.playerId === this.currentPlayer;
+            this.addChatMessage(data.message, isCurrentPlayer ? 'current-player' : 'player', data.playerName);
+        });
+    }
+
+    handleJoinGame() {
+        const playerName = document.getElementById('playerName').value.trim();
+        const roomId = document.getElementById('roomId').value.trim() || this.generateRoomId();
+
+        if (!playerName) {
+            alert('Please enter your name');
+            return;
+        }
+
+        this.socket.emit('joinRoom', {
+            roomId: roomId,
+            playerName: playerName
+        });
+    }
+
+    generateRoomId() {
+        return Math.random().toString(36).substr(2, 6).toUpperCase();
+    }
+
+    showGameScreen() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('gameScreen').style.display = 'block';
+    }
+
+    updatePlayersFromData(playersData) {
+        this.otherPlayers.clear();
+        
+        for (let [playerId, playerData] of Object.entries(playersData)) {
+            if (playerId !== this.currentPlayer) {
+                this.otherPlayers.set(playerId, playerData);
+            } else {
+                // Update current player position if set by server
+                this.player.x = playerData.x;
+                this.fishCount = playerData.fishCount;
+                this.score = playerData.score;
+            }
+        }
+        
+        this.updatePlayersList();
+    }
+
+    updateRoomInfo() {
+        document.getElementById('currentRoomId').textContent = this.roomId;
+        document.getElementById('playerCount').textContent = `${this.otherPlayers.size + 1}/4`;
+    }
+
+    updatePlayersList() {
+        const playersList = document.getElementById('playersList');
+        playersList.innerHTML = '';
+
+        // Add current player first
+        const currentPlayerDiv = document.createElement('div');
+        currentPlayerDiv.className = 'player-item current-player';
+        currentPlayerDiv.innerHTML = `
+            <span class="player-name">You</span>
+            <span class="player-stats">🐟 ${this.fishCount} | 🏆 ${this.score}</span>
+        `;
+        playersList.appendChild(currentPlayerDiv);
+
+        // Add other players
+        for (let [playerId, player] of this.otherPlayers) {
+            const playerDiv = document.createElement('div');
+            playerDiv.className = 'player-item';
+            playerDiv.innerHTML = `
+                <span class="player-name">${player.name}</span>
+                <span class="player-stats">🐟 ${player.fishCount} | 🏆 ${player.score}</span>
+            `;
+            playersList.appendChild(playerDiv);
+        }
+    }
+
+    addChatMessage(message, type = 'player', senderName = '') {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${type}`;
+        
+        if (type === 'system') {
+            messageDiv.textContent = message;
+        } else {
+            messageDiv.innerHTML = `<span class="chat-sender">${senderName}:</span> ${message}`;
+        }
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    sendChatMessage() {
+        const chatInput = document.getElementById('chatInput');
+        const message = chatInput.value.trim();
+        
+        if (message && this.socket) {
+            this.socket.emit('sendChatMessage', { message: message });
+            chatInput.value = '';
+        }
+    }
+
+    handleCanvasClick() {
         switch(this.gameState) {
             case 'ready':
                 this.castLine();
@@ -67,6 +263,15 @@ class FishingGame {
         this.fishingLine.cast = true;
         this.updateStatus('Casting...');
         
+        // Notify other players
+        if (this.socket) {
+            this.socket.emit('playerCast');
+            this.socket.emit('updatePlayerState', {
+                gameState: this.gameState,
+                fishingLine: { ...this.fishingLine }
+            });
+        }
+        
         // Animate line cast
         const castAnimation = () => {
             if (this.fishingLine.bobberY < this.fishingLine.endY) {
@@ -76,13 +281,20 @@ class FishingGame {
                 this.gameState = 'waiting';
                 this.updateStatus('Waiting...');
                 this.startFishTimer();
+                
+                // Update other players
+                if (this.socket) {
+                    this.socket.emit('updatePlayerState', {
+                        gameState: this.gameState,
+                        fishingLine: { ...this.fishingLine }
+                    });
+                }
             }
         };
         castAnimation();
     }
     
     startFishTimer() {
-        // Random wait time between 2-8 seconds
         const waitTime = 2000 + Math.random() * 6000;
         
         setTimeout(() => {
@@ -95,16 +307,20 @@ class FishingGame {
     startBite() {
         this.gameState = 'biting';
         this.currentFish = this.generateRandomFish();
-        this.biteWindow = 2000; // 2 second window to catch
+        this.biteWindow = 2000;
         this.biteTimer = 0;
         
         this.updateStatus('BITE!');
         document.getElementById('biteAlert').style.display = 'block';
-        
-        // Create ripple effect
         this.createRipple(this.fishingLine.x, this.fishingLine.bobberY);
         
-        // Bite timeout
+        // Update other players
+        if (this.socket) {
+            this.socket.emit('updatePlayerState', {
+                gameState: this.gameState
+            });
+        }
+        
         setTimeout(() => {
             if (this.gameState === 'biting') {
                 this.missedFish();
@@ -122,7 +338,7 @@ class FishingGame {
                 return fish;
             }
         }
-        return this.fishTypes[0]; // fallback
+        return this.fishTypes[0];
     }
     
     catchFish() {
@@ -133,9 +349,20 @@ class FishingGame {
             
             document.getElementById('biteAlert').style.display = 'none';
             this.updateStatus(`Caught ${this.currentFish.name}!`);
-            
-            // Create success ripple
             this.createRipple(this.fishingLine.x, this.fishingLine.bobberY, '#00ff00');
+            
+            // Notify server and other players
+            if (this.socket) {
+                this.socket.emit('fishCaught', {
+                    fishName: this.currentFish.name,
+                    fishValue: this.currentFish.value
+                });
+                this.socket.emit('updatePlayerState', {
+                    gameState: this.gameState,
+                    score: this.score,
+                    fishCount: this.fishCount
+                });
+            }
             
             setTimeout(() => {
                 this.resetLine();
@@ -150,6 +377,12 @@ class FishingGame {
         document.getElementById('biteAlert').style.display = 'none';
         this.updateStatus('Fish got away!');
         
+        if (this.socket) {
+            this.socket.emit('updatePlayerState', {
+                gameState: this.gameState
+            });
+        }
+        
         setTimeout(() => {
             this.resetLine();
         }, 1000);
@@ -161,6 +394,13 @@ class FishingGame {
         this.fishingLine.bobberY = this.fishingLine.y;
         this.currentFish = null;
         this.updateStatus('Ready');
+        
+        if (this.socket) {
+            this.socket.emit('updatePlayerState', {
+                gameState: this.gameState,
+                fishingLine: { ...this.fishingLine }
+            });
+        }
     }
     
     createRipple(x, y, color = '#ffffff') {
@@ -190,13 +430,13 @@ class FishingGame {
     updateUI() {
         document.getElementById('fishCount').textContent = this.fishCount;
         document.getElementById('score').textContent = this.score;
+        this.updatePlayersList();
     }
     
     draw() {
-        // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw water surface line
+        // Draw water surface
         this.ctx.strokeStyle = '#1e3a5f';
         this.ctx.lineWidth = 3;
         this.ctx.beginPath();
@@ -204,7 +444,7 @@ class FishingGame {
         this.ctx.lineTo(400, 180);
         this.ctx.stroke();
         
-        // Draw dock/platform
+        // Draw dock
         this.ctx.fillStyle = '#8B4513';
         this.ctx.fillRect(0, 0, 400, 120);
         
@@ -218,28 +458,40 @@ class FishingGame {
             this.ctx.stroke();
         }
         
-        // Draw player
-        this.drawPlayer();
+        // Draw current player
+        this.drawPlayer(this.player, true);
         
-        // Draw fishing line
+        // Draw other players
+        for (let [playerId, player] of this.otherPlayers) {
+            this.drawPlayer(player, false);
+        }
+        
+        // Draw current player's fishing line
         if (this.fishingLine.cast) {
-            this.drawFishingLine();
+            this.drawFishingLine(this.fishingLine);
+        }
+        
+        // Draw other players' fishing lines
+        for (let [playerId, player] of this.otherPlayers) {
+            if (player.fishingLine && player.fishingLine.cast) {
+                this.drawFishingLine(player.fishingLine);
+            }
         }
         
         // Draw ripples
         this.drawRipples();
         
-        // Draw fish indicator (if fish is present)
+        // Draw fish indicator for current player
         if (this.gameState === 'biting') {
             this.drawFishIndicator();
         }
     }
     
-    drawPlayer() {
-        const { x, y, width, height } = this.player;
+    drawPlayer(player, isCurrentPlayer) {
+        const { x, y, width, height } = player;
         
-        // Body
-        this.ctx.fillStyle = '#4169E1';
+        // Body color varies for different players
+        this.ctx.fillStyle = isCurrentPlayer ? '#4169E1' : '#FF6347';
         this.ctx.fillRect(x + 10, y + 20, 20, 30);
         
         // Head
@@ -249,7 +501,7 @@ class FishingGame {
         this.ctx.fill();
         
         // Hat
-        this.ctx.fillStyle = '#8B0000';
+        this.ctx.fillStyle = isCurrentPlayer ? '#8B0000' : '#228B22';
         this.ctx.fillRect(x + 12, y + 5, 16, 8);
         
         // Fishing rod
@@ -259,27 +511,35 @@ class FishingGame {
         this.ctx.moveTo(x + 30, y + 25);
         this.ctx.lineTo(x + 45, y - 10);
         this.ctx.stroke();
+        
+        // Player name tag (for other players)
+        if (!isCurrentPlayer && player.name) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(x - 5, y - 15, player.name.length * 6 + 10, 15);
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText(player.name, x, y - 5);
+        }
     }
     
-    drawFishingLine() {
-        // Fishing line
+    drawFishingLine(fishingLine) {
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 1;
         this.ctx.beginPath();
-        this.ctx.moveTo(this.fishingLine.x + 15, this.player.y - 10);
-        this.ctx.lineTo(this.fishingLine.x, this.fishingLine.bobberY);
+        this.ctx.moveTo(fishingLine.x + 15, this.player.y - 10);
+        this.ctx.lineTo(fishingLine.x, fishingLine.bobberY);
         this.ctx.stroke();
         
         // Bobber
         this.ctx.fillStyle = '#ff0000';
         this.ctx.beginPath();
-        this.ctx.arc(this.fishingLine.x, this.fishingLine.bobberY, 4, 0, Math.PI * 2);
+        this.ctx.arc(fishingLine.x, fishingLine.bobberY, 4, 0, Math.PI * 2);
         this.ctx.fill();
         
         // Bobber highlight
         this.ctx.fillStyle = '#ffffff';
         this.ctx.beginPath();
-        this.ctx.arc(this.fishingLine.x - 1, this.fishingLine.bobberY - 1, 2, 0, Math.PI * 2);
+        this.ctx.arc(fishingLine.x - 1, fishingLine.bobberY - 1, 2, 0, Math.PI * 2);
         this.ctx.fill();
     }
     
@@ -296,13 +556,11 @@ class FishingGame {
     }
     
     drawFishIndicator() {
-        // Subtle fish shadow under bobber
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         this.ctx.beginPath();
         this.ctx.ellipse(this.fishingLine.x, this.fishingLine.bobberY + 15, 15, 8, 0, 0, Math.PI * 2);
         this.ctx.fill();
         
-        // Animated bobber movement
         const bobOffset = Math.sin(Date.now() / 100) * 3;
         this.fishingLine.bobberY = this.fishingLine.endY + bobOffset;
     }
@@ -316,5 +574,5 @@ class FishingGame {
 
 // Start the game when page loads
 window.addEventListener('load', () => {
-    new FishingGame();
+    new MultiplayerFishingGame();
 });
